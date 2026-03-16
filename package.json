@@ -1,0 +1,27 @@
+{
+	"name": "retich-messaging",
+	"version": "1.0.0",
+	"description": "Service de messagerie temps réel pour la plateforme ReTiCh. Gère les conversations, messages et WebSockets.",
+	"scripts": {
+		"prepare": "husky",
+		"lint": "biome check .",
+		"lint:fix": "biome check --write .",
+		"format": "biome format --write ."
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/ReTiCh-Corp/ReTiCh-Messaging.git"
+	},
+	"keywords": [],
+	"author": "",
+	"license": "ISC",
+	"type": "commonjs",
+	"bugs": {
+		"url": "https://github.com/ReTiCh-Corp/ReTiCh-Messaging/issues"
+	},
+	"homepage": "https://github.com/ReTiCh-Corp/ReTiCh-Messaging#readme",
+	"devDependencies": {
+		"@biomejs/biome": "^2.4.7",
+		"husky": "^9.1.7"
+	}
+}

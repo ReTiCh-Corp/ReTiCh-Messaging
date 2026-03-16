@@ -1,0 +1,2 @@
+echo "Running Go build check..."
+go build -o /dev/null ./cmd/server/
