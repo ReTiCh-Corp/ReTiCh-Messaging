@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -306,6 +307,23 @@ func TestCreate_409_DirectExists(t *testing.T) {
 	}
 }
 
+func TestCreate_400_DirectRequiresOneParticipant(t *testing.T) {
+	mock := &mockConversationService{
+		createErr: service.ErrDirectRequiresOneParticipant,
+	}
+	h := NewConversationHandler(mock)
+	r := newTestRouter(h)
+
+	body := `{"type":"direct","participant_ids":["` + uuid.New().String() + `"]}`
+	req := makeRequest("POST", "/conversations", body, uuid.New().String())
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", w.Code)
+	}
+}
+
 func TestCreate_400_InvalidUserIDs(t *testing.T) {
 	mock := &mockConversationService{
 		createErr: service.ErrInvalidUserIDs,
@@ -415,6 +433,22 @@ func TestGetByID_403(t *testing.T) {
 
 	if w.Code != http.StatusForbidden {
 		t.Errorf("expected 403, got %d", w.Code)
+	}
+}
+
+func TestGetByID_500(t *testing.T) {
+	mock := &mockConversationService{
+		getByIDErr: errors.New("unexpected db error"),
+	}
+	h := NewConversationHandler(mock)
+	r := newTestRouter(h)
+
+	req := makeRequest("GET", "/conversations/"+uuid.New().String(), "", uuid.New().String())
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("expected 500, got %d", w.Code)
 	}
 }
 
@@ -596,6 +630,22 @@ func TestUpdate_404(t *testing.T) {
 	}
 }
 
+func TestUpdate_500(t *testing.T) {
+	mock := &mockConversationService{
+		updateErr: errors.New("unexpected db error"),
+	}
+	h := NewConversationHandler(mock)
+	r := newTestRouter(h)
+
+	req := makeRequest("PUT", "/conversations/"+uuid.New().String(), `{"name":"ok"}`, uuid.New().String())
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("expected 500, got %d", w.Code)
+	}
+}
+
 // =============================================================================
 // Archive
 // =============================================================================
@@ -687,6 +737,22 @@ func TestArchive_404(t *testing.T) {
 
 	if w.Code != http.StatusNotFound {
 		t.Errorf("expected 404, got %d", w.Code)
+	}
+}
+
+func TestArchive_500(t *testing.T) {
+	mock := &mockConversationService{
+		archiveErr: errors.New("unexpected db error"),
+	}
+	h := NewConversationHandler(mock)
+	r := newTestRouter(h)
+
+	req := makeRequest("DELETE", "/conversations/"+uuid.New().String(), "", uuid.New().String())
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("expected 500, got %d", w.Code)
 	}
 }
 
@@ -834,6 +900,57 @@ func TestAddParticipants_404(t *testing.T) {
 	}
 }
 
+func TestAddParticipants_403_NotParticipant(t *testing.T) {
+	mock := &mockConversationService{
+		addPartErr: service.ErrNotParticipant,
+	}
+	h := NewConversationHandler(mock)
+	r := newTestRouter(h)
+
+	body := `{"participant_ids":["` + uuid.New().String() + `"]}`
+	req := makeRequest("POST", "/conversations/"+uuid.New().String()+"/participants", body, uuid.New().String())
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Errorf("expected 403, got %d", w.Code)
+	}
+}
+
+func TestAddParticipants_400_InvalidUserIDs(t *testing.T) {
+	mock := &mockConversationService{
+		addPartErr: service.ErrInvalidUserIDs,
+	}
+	h := NewConversationHandler(mock)
+	r := newTestRouter(h)
+
+	body := `{"participant_ids":["` + uuid.New().String() + `"]}`
+	req := makeRequest("POST", "/conversations/"+uuid.New().String()+"/participants", body, uuid.New().String())
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", w.Code)
+	}
+}
+
+func TestAddParticipants_500(t *testing.T) {
+	mock := &mockConversationService{
+		addPartErr: errors.New("unexpected db error"),
+	}
+	h := NewConversationHandler(mock)
+	r := newTestRouter(h)
+
+	body := `{"participant_ids":["` + uuid.New().String() + `"]}`
+	req := makeRequest("POST", "/conversations/"+uuid.New().String()+"/participants", body, uuid.New().String())
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("expected 500, got %d", w.Code)
+	}
+}
+
 func TestAddParticipants_400_CannotModifyDirect(t *testing.T) {
 	mock := &mockConversationService{
 		addPartErr: service.ErrCannotModifyDirect,
@@ -968,6 +1085,22 @@ func TestRemoveParticipant_403_NotParticipant(t *testing.T) {
 
 	if w.Code != http.StatusForbidden {
 		t.Errorf("expected 403, got %d", w.Code)
+	}
+}
+
+func TestRemoveParticipant_500(t *testing.T) {
+	mock := &mockConversationService{
+		removePartErr: errors.New("unexpected db error"),
+	}
+	h := NewConversationHandler(mock)
+	r := newTestRouter(h)
+
+	req := makeRequest("DELETE", "/conversations/"+uuid.New().String()+"/participants/"+uuid.New().String(), "", uuid.New().String())
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("expected 500, got %d", w.Code)
 	}
 }
 
