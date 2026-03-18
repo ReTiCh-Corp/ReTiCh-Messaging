@@ -51,19 +51,15 @@ type mockStore struct {
 	countPartErr     error
 
 	// Transaction
-	beginTxResult *mockStoreTx
-	beginTxErr    error
+	execTxErr error
 }
 
-func (m *mockStore) BeginTx(_ context.Context) (db.StoreTx, error) {
-	if m.beginTxErr != nil {
-		return nil, m.beginTxErr
+// ExecTx executes fn using the mock store itself as the Querier.
+func (m *mockStore) ExecTx(_ context.Context, fn func(db.Querier) error) error {
+	if m.execTxErr != nil {
+		return m.execTxErr
 	}
-	if m.beginTxResult != nil {
-		return m.beginTxResult, nil
-	}
-	// Default: return a tx that mirrors the store
-	return &mockStoreTx{store: m}, nil
+	return fn(m)
 }
 
 func (m *mockStore) CreateConversation(_ context.Context, _ db.CreateConversationParams) (db.Conversation, error) {
@@ -113,65 +109,6 @@ func (m *mockStore) ListParticipants(_ context.Context, _ uuid.UUID) ([]db.Conve
 }
 func (m *mockStore) CountActiveParticipants(_ context.Context, _ uuid.UUID) (int64, error) {
 	return m.countPartResult, m.countPartErr
-}
-
-// mockStoreTx delegates to its parent store for simplicity.
-type mockStoreTx struct {
-	store       *mockStore
-	commitErr   error
-	rollbackErr error
-}
-
-func (t *mockStoreTx) Commit() error   { return t.commitErr }
-func (t *mockStoreTx) Rollback() error { return t.rollbackErr }
-
-func (t *mockStoreTx) CreateConversation(ctx context.Context, arg db.CreateConversationParams) (db.Conversation, error) {
-	return t.store.CreateConversation(ctx, arg)
-}
-func (t *mockStoreTx) GetConversationByID(ctx context.Context, id uuid.UUID) (db.Conversation, error) {
-	return t.store.GetConversationByID(ctx, id)
-}
-func (t *mockStoreTx) UpdateConversation(ctx context.Context, arg db.UpdateConversationParams) (db.Conversation, error) {
-	return t.store.UpdateConversation(ctx, arg)
-}
-func (t *mockStoreTx) ArchiveConversation(ctx context.Context, id uuid.UUID) (db.Conversation, error) {
-	return t.store.ArchiveConversation(ctx, id)
-}
-func (t *mockStoreTx) UnarchiveConversation(ctx context.Context, id uuid.UUID) (db.Conversation, error) {
-	return t.store.UnarchiveConversation(ctx, id)
-}
-func (t *mockStoreTx) DeleteConversation(ctx context.Context, id uuid.UUID) error {
-	return t.store.DeleteConversation(ctx, id)
-}
-func (t *mockStoreTx) ListConversationsByUser(ctx context.Context, arg db.ListConversationsByUserParams) ([]db.Conversation, error) {
-	return t.store.ListConversationsByUser(ctx, arg)
-}
-func (t *mockStoreTx) CountConversationsByUser(ctx context.Context, id uuid.UUID) (int64, error) {
-	return t.store.CountConversationsByUser(ctx, id)
-}
-func (t *mockStoreTx) SearchConversationsByUser(ctx context.Context, arg db.SearchConversationsByUserParams) ([]db.Conversation, error) {
-	return t.store.SearchConversationsByUser(ctx, arg)
-}
-func (t *mockStoreTx) CountSearchConversationsByUser(ctx context.Context, arg db.CountSearchConversationsByUserParams) (int64, error) {
-	return t.store.CountSearchConversationsByUser(ctx, arg)
-}
-func (t *mockStoreTx) GetDirectConversationBetweenUsers(ctx context.Context, arg db.GetDirectConversationBetweenUsersParams) (db.Conversation, error) {
-	return t.store.GetDirectConversationBetweenUsers(ctx, arg)
-}
-func (t *mockStoreTx) AddParticipant(ctx context.Context, arg db.AddParticipantParams) (db.ConversationParticipant, error) {
-	return t.store.AddParticipant(ctx, arg)
-}
-func (t *mockStoreTx) RemoveParticipant(ctx context.Context, arg db.RemoveParticipantParams) error {
-	return t.store.RemoveParticipant(ctx, arg)
-}
-func (t *mockStoreTx) GetParticipant(ctx context.Context, arg db.GetParticipantParams) (db.ConversationParticipant, error) {
-	return t.store.GetParticipant(ctx, arg)
-}
-func (t *mockStoreTx) ListParticipants(ctx context.Context, id uuid.UUID) ([]db.ConversationParticipant, error) {
-	return t.store.ListParticipants(ctx, id)
-}
-func (t *mockStoreTx) CountActiveParticipants(ctx context.Context, id uuid.UUID) (int64, error) {
-	return t.store.CountActiveParticipants(ctx, id)
 }
 
 // =============================================================================
@@ -335,10 +272,10 @@ func TestCreate_UserValidationError(t *testing.T) {
 	}
 }
 
-func TestCreate_BeginTxError(t *testing.T) {
+func TestCreate_ExecTxError(t *testing.T) {
 	store := &mockStore{
 		directConvErr: sql.ErrNoRows,
-		beginTxErr:    errors.New("tx error"),
+		execTxErr:     errors.New("tx error"),
 	}
 	svc := NewConversationService(store, nil)
 
@@ -1008,30 +945,6 @@ func TestCreate_AddCreatorParticipantError(t *testing.T) {
 		directConvErr:    sql.ErrNoRows,
 		createConvResult: conv,
 		addPartErr:       errors.New("unique constraint"),
-	}
-	svc := NewConversationService(store, nil)
-
-	_, err := svc.Create(context.Background(), CreateConversationInput{
-		Type:           "group",
-		Name:           strPtr("Test"),
-		CreatorID:      uuid.New(),
-		ParticipantIDs: []uuid.UUID{uuid.New()},
-	})
-	if err == nil {
-		t.Fatal("expected error")
-	}
-}
-
-func TestCreate_CommitError(t *testing.T) {
-	conv := groupConversation()
-	store := &mockStore{
-		directConvErr:    sql.ErrNoRows,
-		createConvResult: conv,
-		addPartResult:    db.ConversationParticipant{ID: uuid.New()},
-		beginTxResult: &mockStoreTx{
-			store:     &mockStore{createConvResult: conv, addPartResult: db.ConversationParticipant{ID: uuid.New()}},
-			commitErr: errors.New("commit failed"),
-		},
 	}
 	svc := NewConversationService(store, nil)
 

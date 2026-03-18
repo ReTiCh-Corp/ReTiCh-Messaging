@@ -8,14 +8,7 @@ import (
 // Store wraps Querier with transaction support for testability.
 type Store interface {
 	Querier
-	BeginTx(ctx context.Context) (StoreTx, error)
-}
-
-// StoreTx is a transactional store that can be committed or rolled back.
-type StoreTx interface {
-	Querier
-	Commit() error
-	Rollback() error
+	ExecTx(ctx context.Context, fn func(Querier) error) error
 }
 
 // SQLStore implements Store using a real SQL database.
@@ -31,26 +24,19 @@ func NewSQLStore(conn *sql.DB) *SQLStore {
 	}
 }
 
-func (s *SQLStore) BeginTx(ctx context.Context) (StoreTx, error) {
+// ExecTx executes fn within a database transaction. If fn returns an error,
+// the transaction is rolled back. Otherwise, the transaction is committed.
+func (s *SQLStore) ExecTx(ctx context.Context, fn func(Querier) error) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	return &sqlStoreTx{
-		Queries: s.Queries.WithTx(tx),
-		tx:      tx,
-	}, nil
-}
+	defer tx.Rollback()
 
-type sqlStoreTx struct {
-	*Queries
-	tx *sql.Tx
-}
+	q := s.Queries.WithTx(tx)
+	if err := fn(q); err != nil {
+		return err
+	}
 
-func (t *sqlStoreTx) Commit() error {
-	return t.tx.Commit()
-}
-
-func (t *sqlStoreTx) Rollback() error {
-	return t.tx.Rollback()
+	return tx.Commit()
 }

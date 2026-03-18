@@ -166,62 +166,61 @@ func (s *conversationService) Create(ctx context.Context, input CreateConversati
 		}
 	}
 
-	// Begin transaction
-	txStore, err := s.store.BeginTx(ctx)
-	if err != nil {
-		return ConversationDetailResponse{}, err
-	}
-	defer txStore.Rollback()
+	// Execute creation within a transaction
+	var conv db.Conversation
+	err := s.store.ExecTx(ctx, func(q db.Querier) error {
+		// Create conversation
+		params := db.CreateConversationParams{
+			Type: db.ConversationType(input.Type),
+		}
+		if input.Type != "direct" {
+			params.CreatorID = uuid.NullUUID{UUID: input.CreatorID, Valid: true}
+		}
+		if input.Name != nil {
+			params.Name = sql.NullString{String: *input.Name, Valid: true}
+		}
+		if input.Description != nil {
+			params.Description = sql.NullString{String: *input.Description, Valid: true}
+		}
+		if input.AvatarURL != nil {
+			params.AvatarUrl = sql.NullString{String: *input.AvatarURL, Valid: true}
+		}
 
-	// Create conversation
-	params := db.CreateConversationParams{
-		Type: db.ConversationType(input.Type),
-	}
-	if input.Type != "direct" {
-		params.CreatorID = uuid.NullUUID{UUID: input.CreatorID, Valid: true}
-	}
-	if input.Name != nil {
-		params.Name = sql.NullString{String: *input.Name, Valid: true}
-	}
-	if input.Description != nil {
-		params.Description = sql.NullString{String: *input.Description, Valid: true}
-	}
-	if input.AvatarURL != nil {
-		params.AvatarUrl = sql.NullString{String: *input.AvatarURL, Valid: true}
-	}
+		var txErr error
+		conv, txErr = q.CreateConversation(ctx, params)
+		if txErr != nil {
+			return txErr
+		}
 
-	conv, err := txStore.CreateConversation(ctx, params)
-	if err != nil {
-		return ConversationDetailResponse{}, err
-	}
+		// Add creator as participant
+		creatorRole := "owner"
+		if input.Type == "direct" {
+			creatorRole = "member"
+		}
+		_, txErr = q.AddParticipant(ctx, db.AddParticipantParams{
+			ConversationID: conv.ID,
+			UserID:         input.CreatorID,
+			Role:           sql.NullString{String: creatorRole, Valid: true},
+		})
+		if txErr != nil {
+			return txErr
+		}
 
-	// Add creator as participant
-	creatorRole := "owner"
-	if input.Type == "direct" {
-		creatorRole = "member"
-	}
-	_, err = txStore.AddParticipant(ctx, db.AddParticipantParams{
-		ConversationID: conv.ID,
-		UserID:         input.CreatorID,
-		Role:           sql.NullString{String: creatorRole, Valid: true},
+		// Add other participants
+		for _, pid := range input.ParticipantIDs {
+			_, txErr = q.AddParticipant(ctx, db.AddParticipantParams{
+				ConversationID: conv.ID,
+				UserID:         pid,
+				Role:           sql.NullString{String: "member", Valid: true},
+			})
+			if txErr != nil {
+				return txErr
+			}
+		}
+
+		return nil
 	})
 	if err != nil {
-		return ConversationDetailResponse{}, err
-	}
-
-	// Add other participants
-	for _, pid := range input.ParticipantIDs {
-		_, err = txStore.AddParticipant(ctx, db.AddParticipantParams{
-			ConversationID: conv.ID,
-			UserID:         pid,
-			Role:           sql.NullString{String: "member", Valid: true},
-		})
-		if err != nil {
-			return ConversationDetailResponse{}, err
-		}
-	}
-
-	if err := txStore.Commit(); err != nil {
 		return ConversationDetailResponse{}, err
 	}
 
