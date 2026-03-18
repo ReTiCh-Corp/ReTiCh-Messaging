@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -11,6 +12,11 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
+	_ "github.com/lib/pq"
+	"github.com/retich-corp/messaging/internal/client"
+	db "github.com/retich-corp/messaging/internal/db"
+	"github.com/retich-corp/messaging/internal/handler"
+	"github.com/retich-corp/messaging/internal/service"
 )
 
 type HealthResponse struct {
@@ -25,9 +31,52 @@ func main() {
 		port = "8082"
 	}
 
+	// Database connection
+	databaseURL := os.Getenv("DATABASE_URL")
+	if databaseURL == "" {
+		log.Fatal("DATABASE_URL environment variable is required")
+	}
+
+	conn, err := sql.Open("postgres", databaseURL)
+	if err != nil {
+		log.Fatalf("Failed to connect to database: %v", err)
+	}
+	defer conn.Close()
+
+	conn.SetMaxOpenConns(25)
+	conn.SetMaxIdleConns(10)
+	conn.SetConnMaxLifetime(5 * time.Minute)
+
+	if err := conn.Ping(); err != nil {
+		log.Fatalf("Failed to ping database: %v", err)
+	}
+	log.Println("Connected to database")
+
+	// Initialize user client for inter-service communication
+	var userClient *client.UserClient
+	if userServiceURL := os.Getenv("USER_SERVICE_URL"); userServiceURL != "" {
+		userClient = client.NewUserClient(userServiceURL)
+		log.Printf("User service client configured: %s", userServiceURL)
+	} else {
+		log.Println("USER_SERVICE_URL not set, user validation disabled")
+	}
+
+	// Initialize layers
+	store := db.NewSQLStore(conn)
+	conversationService := service.NewConversationService(store, userClient)
+	conversationHandler := handler.NewConversationHandler(conversationService)
+
 	r := mux.NewRouter()
+	r.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			log.Printf("[DEBUG] %s %s | X-User-ID: %q | Headers: %v", r.Method, r.URL.String(), r.Header.Get("X-User-ID"), r.Header)
+			next.ServeHTTP(w, r)
+		})
+	})
 	r.HandleFunc("/health", healthHandler).Methods("GET")
-	r.HandleFunc("/ready", readyHandler).Methods("GET")
+	r.HandleFunc("/ready", readyHandler(conn)).Methods("GET")
+	r.HandleFunc("/test", healthHandler).Methods("GET")
+	conversationHandler.RegisterRoutes(r)
 
 	srv := &http.Server{
 		Addr:         ":" + port,
@@ -69,7 +118,14 @@ func healthHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
-func readyHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"status": "ready"})
+func readyHandler(conn *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if err := conn.PingContext(r.Context()); err != nil {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			json.NewEncoder(w).Encode(map[string]string{"status": "not ready", "error": err.Error()})
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]string{"status": "ready"})
+	}
 }
