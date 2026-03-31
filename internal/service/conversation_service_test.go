@@ -131,6 +131,40 @@ func (m *mockStore) SoftDeleteMessage(_ context.Context, _ uuid.UUID) (db.Messag
 	return db.Message{}, nil
 }
 
+// Reaction queries (stub implementations to satisfy Querier interface)
+func (m *mockStore) AddReaction(_ context.Context, _ db.AddReactionParams) (db.MessageReaction, error) {
+	return db.MessageReaction{}, nil
+}
+func (m *mockStore) RemoveReaction(_ context.Context, _ db.RemoveReactionParams) error {
+	return nil
+}
+func (m *mockStore) ListReactionsByMessage(_ context.Context, _ uuid.UUID) ([]db.MessageReaction, error) {
+	return nil, nil
+}
+
+// Read receipt queries
+func (m *mockStore) UpsertReadReceipt(_ context.Context, _ db.UpsertReadReceiptParams) (db.ReadReceipt, error) {
+	return db.ReadReceipt{}, nil
+}
+func (m *mockStore) GetReadReceipt(_ context.Context, _ db.GetReadReceiptParams) (db.ReadReceipt, error) {
+	return db.ReadReceipt{}, nil
+}
+func (m *mockStore) ListReadReceipts(_ context.Context, _ uuid.UUID) ([]db.ReadReceipt, error) {
+	return nil, nil
+}
+
+// Pinned message queries
+func (m *mockStore) PinMessage(_ context.Context, _ db.PinMessageParams) (db.PinnedMessage, error) {
+	return db.PinnedMessage{}, nil
+}
+func (m *mockStore) UnpinMessage(_ context.Context, _ db.UnpinMessageParams) error { return nil }
+func (m *mockStore) ListPinnedMessages(_ context.Context, _ uuid.UUID) ([]db.PinnedMessage, error) {
+	return nil, nil
+}
+func (m *mockStore) GetPinnedMessage(_ context.Context, _ db.GetPinnedMessageParams) (db.PinnedMessage, error) {
+	return db.PinnedMessage{}, nil
+}
+
 // =============================================================================
 // Mock UserValidator
 // =============================================================================

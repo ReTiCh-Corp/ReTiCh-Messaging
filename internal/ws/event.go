@@ -9,6 +9,11 @@ const (
 	EventMessageDeleted = "message.deleted"
 	EventTypingStart    = "typing.start"
 	EventTypingStop     = "typing.stop"
+	EventReactionAdded  = "reaction.added"
+	EventReactionRemoved = "reaction.removed"
+	EventReadUpdated    = "read.updated"
+	EventMessagePinned  = "message.pinned"
+	EventMessageUnpinned = "message.unpinned"
 )
 
 // Event is the envelope for all WebSocket messages.
