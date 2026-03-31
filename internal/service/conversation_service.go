@@ -37,6 +37,7 @@ type ConversationResponse struct {
 	LastMessageAt *time.Time `json:"last_message_at"`
 	CreatedAt     time.Time  `json:"created_at"`
 	UpdatedAt     time.Time  `json:"updated_at"`
+	UnreadCount   int64      `json:"unread_count"`
 }
 
 type ParticipantResponse struct {
@@ -287,7 +288,11 @@ func (s *conversationService) ListByUser(ctx context.Context, input ListConversa
 		return ListConversationsResult{}, err
 	}
 
-	return toListResult(conversations, total), nil
+	results := make([]ConversationResponse, len(conversations))
+	for i, c := range conversations {
+		results[i] = toConversationResponseFromRow(c.ID, c.Type, c.Name, c.Description, c.AvatarUrl, c.CreatorID, c.IsArchived, c.LastMessageAt, c.CreatedAt, c.UpdatedAt, c.UnreadCount)
+	}
+	return ListConversationsResult{Conversations: results, Total: total}, nil
 }
 
 func (s *conversationService) Update(ctx context.Context, input UpdateConversationInput) (ConversationDetailResponse, error) {
@@ -536,7 +541,11 @@ func (s *conversationService) searchByUser(ctx context.Context, input ListConver
 		return ListConversationsResult{}, err
 	}
 
-	return toListResult(conversations, total), nil
+	results := make([]ConversationResponse, len(conversations))
+	for i, c := range conversations {
+		results[i] = toConversationResponseFromRow(c.ID, c.Type, c.Name, c.Description, c.AvatarUrl, c.CreatorID, c.IsArchived, c.LastMessageAt, c.CreatedAt, c.UpdatedAt, c.UnreadCount)
+	}
+	return ListConversationsResult{Conversations: results, Total: total}, nil
 }
 
 func toListResult(conversations []db.Conversation, total int64) ListConversationsResult {
@@ -579,6 +588,41 @@ func toConversationResponse(c db.Conversation) ConversationResponse {
 		resp.UpdatedAt = c.UpdatedAt.Time
 	}
 
+	return resp
+}
+
+func toConversationResponseFromRow(
+	id uuid.UUID, convType db.ConversationType, name, description, avatarUrl sql.NullString,
+	creatorID uuid.NullUUID, isArchived sql.NullBool, lastMessageAt, createdAt, updatedAt sql.NullTime,
+	unreadCount int64,
+) ConversationResponse {
+	resp := ConversationResponse{
+		ID:          id,
+		Type:        string(convType),
+		IsArchived:  isArchived.Bool,
+		UnreadCount: unreadCount,
+	}
+	if name.Valid {
+		resp.Name = &name.String
+	}
+	if description.Valid {
+		resp.Description = &description.String
+	}
+	if avatarUrl.Valid {
+		resp.AvatarURL = &avatarUrl.String
+	}
+	if creatorID.Valid {
+		resp.CreatorID = &creatorID.UUID
+	}
+	if lastMessageAt.Valid {
+		resp.LastMessageAt = &lastMessageAt.Time
+	}
+	if createdAt.Valid {
+		resp.CreatedAt = createdAt.Time
+	}
+	if updatedAt.Valid {
+		resp.UpdatedAt = updatedAt.Time
+	}
 	return resp
 }
 

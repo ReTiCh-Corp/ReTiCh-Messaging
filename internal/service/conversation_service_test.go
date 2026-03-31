@@ -25,11 +25,11 @@ type mockStore struct {
 	updateConvErr    error
 	archiveResult    db.Conversation
 	archiveErr       error
-	listConvResult   []db.Conversation
+	listConvResult   []db.ListConversationsByUserRow
 	listConvErr      error
 	countConvResult  int64
 	countConvErr     error
-	searchConvResult []db.Conversation
+	searchConvResult []db.SearchConversationsByUserRow
 	searchConvErr    error
 	countSearchResult int64
 	countSearchErr   error
@@ -80,13 +80,13 @@ func (m *mockStore) UnarchiveConversation(_ context.Context, _ uuid.UUID) (db.Co
 func (m *mockStore) DeleteConversation(_ context.Context, _ uuid.UUID) error {
 	return m.deleteConvErr
 }
-func (m *mockStore) ListConversationsByUser(_ context.Context, _ db.ListConversationsByUserParams) ([]db.Conversation, error) {
+func (m *mockStore) ListConversationsByUser(_ context.Context, _ db.ListConversationsByUserParams) ([]db.ListConversationsByUserRow, error) {
 	return m.listConvResult, m.listConvErr
 }
 func (m *mockStore) CountConversationsByUser(_ context.Context, _ uuid.UUID) (int64, error) {
 	return m.countConvResult, m.countConvErr
 }
-func (m *mockStore) SearchConversationsByUser(_ context.Context, _ db.SearchConversationsByUserParams) ([]db.Conversation, error) {
+func (m *mockStore) SearchConversationsByUser(_ context.Context, _ db.SearchConversationsByUserParams) ([]db.SearchConversationsByUserRow, error) {
 	return m.searchConvResult, m.searchConvErr
 }
 func (m *mockStore) CountSearchConversationsByUser(_ context.Context, _ db.CountSearchConversationsByUserParams) (int64, error) {
@@ -211,6 +211,24 @@ func directConversation() db.Conversation {
 	return db.Conversation{
 		ID:   uuid.New(),
 		Type: db.ConversationTypeDirect,
+	}
+}
+
+func groupConversationRow() db.ListConversationsByUserRow {
+	c := groupConversation()
+	return db.ListConversationsByUserRow{
+		ID: c.ID, Type: c.Type, Name: c.Name, Description: c.Description,
+		AvatarUrl: c.AvatarUrl, CreatorID: c.CreatorID, IsArchived: c.IsArchived,
+		LastMessageAt: c.LastMessageAt, CreatedAt: c.CreatedAt, UpdatedAt: c.UpdatedAt,
+	}
+}
+
+func groupSearchRow() db.SearchConversationsByUserRow {
+	c := groupConversation()
+	return db.SearchConversationsByUserRow{
+		ID: c.ID, Type: c.Type, Name: c.Name, Description: c.Description,
+		AvatarUrl: c.AvatarUrl, CreatorID: c.CreatorID, IsArchived: c.IsArchived,
+		LastMessageAt: c.LastMessageAt, CreatedAt: c.CreatedAt, UpdatedAt: c.UpdatedAt,
 	}
 }
 
@@ -416,7 +434,7 @@ func TestGetByID_NotParticipant(t *testing.T) {
 
 func TestListByUser_Success(t *testing.T) {
 	store := &mockStore{
-		listConvResult:  []db.Conversation{groupConversation()},
+		listConvResult:  []db.ListConversationsByUserRow{groupConversationRow()},
 		countConvResult: 1,
 	}
 	svc := NewConversationService(store, nil)
@@ -437,7 +455,7 @@ func TestListByUser_Success(t *testing.T) {
 func TestListByUser_WithSearch(t *testing.T) {
 	search := "test"
 	store := &mockStore{
-		searchConvResult:  []db.Conversation{groupConversation()},
+		searchConvResult:  []db.SearchConversationsByUserRow{groupSearchRow()},
 		countSearchResult: 1,
 	}
 	svc := NewConversationService(store, nil)
@@ -470,7 +488,7 @@ func TestListByUser_ListError(t *testing.T) {
 
 func TestListByUser_CountError(t *testing.T) {
 	store := &mockStore{
-		listConvResult: []db.Conversation{},
+		listConvResult: []db.ListConversationsByUserRow{},
 		countConvErr:   errors.New("db error"),
 	}
 	svc := NewConversationService(store, nil)
@@ -497,7 +515,7 @@ func TestListByUser_SearchError(t *testing.T) {
 func TestListByUser_SearchCountError(t *testing.T) {
 	search := "test"
 	store := &mockStore{
-		searchConvResult: []db.Conversation{},
+		searchConvResult: []db.SearchConversationsByUserRow{},
 		countSearchErr:   errors.New("db error"),
 	}
 	svc := NewConversationService(store, nil)
