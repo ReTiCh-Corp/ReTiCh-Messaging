@@ -165,6 +165,23 @@ func (m *mockStore) GetPinnedMessage(_ context.Context, _ db.GetPinnedMessagePar
 	return db.PinnedMessage{}, nil
 }
 
+// Attachment queries
+func (m *mockStore) CreateAttachment(_ context.Context, _ db.CreateAttachmentParams) (db.Attachment, error) {
+	return db.Attachment{}, nil
+}
+func (m *mockStore) GetAttachment(_ context.Context, _ uuid.UUID) (db.Attachment, error) {
+	return db.Attachment{}, nil
+}
+func (m *mockStore) ListAttachmentsByMessage(_ context.Context, _ uuid.UUID) ([]db.Attachment, error) {
+	return nil, nil
+}
+func (m *mockStore) ListAttachmentsByConversation(_ context.Context, _ db.ListAttachmentsByConversationParams) ([]db.Attachment, error) {
+	return nil, nil
+}
+func (m *mockStore) CountAttachmentsByConversation(_ context.Context, _ uuid.UUID) (int64, error) {
+	return 0, nil
+}
+
 // =============================================================================
 // Mock UserValidator
 // =============================================================================

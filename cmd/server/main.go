@@ -21,6 +21,7 @@ import (
 	db "github.com/retich-corp/messaging/internal/db"
 	"github.com/retich-corp/messaging/internal/handler"
 	"github.com/retich-corp/messaging/internal/service"
+	"github.com/retich-corp/messaging/internal/storage"
 	"github.com/retich-corp/messaging/internal/ws"
 )
 
@@ -101,6 +102,22 @@ func main() {
 	socialHandler := handler.NewSocialHandler(socialService)
 	wsHandler := ws.NewHandler(wsHub, store)
 
+	// Initialize file storage
+	uploadDir := os.Getenv("UPLOAD_DIR")
+	if uploadDir == "" {
+		uploadDir = "./uploads"
+	}
+	uploadBaseURL := os.Getenv("UPLOAD_BASE_URL")
+	if uploadBaseURL == "" {
+		uploadBaseURL = "http://localhost:" + port + "/uploads"
+	}
+	fileStorage, err := storage.NewLocalStorage(uploadDir, uploadBaseURL)
+	if err != nil {
+		log.Fatalf("Failed to initialize file storage: %v", err)
+	}
+	uploadService := service.NewUploadService(store, fileStorage)
+	uploadHandler := handler.NewUploadHandler(uploadService, fileStorage)
+
 	r := mux.NewRouter()
 	r.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -112,9 +129,14 @@ func main() {
 	r.HandleFunc("/ready", readyHandler(conn)).Methods("GET")
 	r.HandleFunc("/test", healthHandler).Methods("GET")
 	r.HandleFunc("/ws", wsHandler.ServeWS)
+
+	// Serve uploaded files statically
+	r.PathPrefix("/uploads/").Handler(http.StripPrefix("/uploads/", http.FileServer(http.Dir(uploadDir))))
+
 	conversationHandler.RegisterRoutes(r)
 	messageHandler.RegisterRoutes(r)
 	socialHandler.RegisterRoutes(r)
+	uploadHandler.RegisterRoutes(r)
 
 	srv := &http.Server{
 		Addr:         ":" + port,
