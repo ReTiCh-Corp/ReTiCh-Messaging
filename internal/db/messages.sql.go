@@ -25,6 +25,25 @@ func (q *Queries) CountMessagesByConversation(ctx context.Context, conversationI
 	return count, err
 }
 
+const countSearchMessages = `-- name: CountSearchMessages :one
+SELECT COUNT(*) FROM messages
+WHERE conversation_id = $1
+AND (is_deleted = FALSE OR is_deleted IS NULL)
+AND to_tsvector('french', COALESCE(content, '')) @@ plainto_tsquery('french', $2)
+`
+
+type CountSearchMessagesParams struct {
+	ConversationID uuid.UUID `json:"conversation_id"`
+	PlaintoTsquery string    `json:"plainto_tsquery"`
+}
+
+func (q *Queries) CountSearchMessages(ctx context.Context, arg CountSearchMessagesParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countSearchMessages, arg.ConversationID, arg.PlaintoTsquery)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createMessage = `-- name: CreateMessage :one
 INSERT INTO messages (conversation_id, sender_id, type, content, metadata, reply_to_id)
 VALUES ($1, $2, $3, $4, $5, $6)
@@ -112,6 +131,65 @@ type ListMessagesByConversationParams struct {
 
 func (q *Queries) ListMessagesByConversation(ctx context.Context, arg ListMessagesByConversationParams) ([]Message, error) {
 	rows, err := q.db.QueryContext(ctx, listMessagesByConversation, arg.ConversationID, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Message
+	for rows.Next() {
+		var i Message
+		if err := rows.Scan(
+			&i.ID,
+			&i.ConversationID,
+			&i.SenderID,
+			&i.Type,
+			&i.Content,
+			&i.Metadata,
+			&i.ReplyToID,
+			&i.IsEdited,
+			&i.EditedAt,
+			&i.IsDeleted,
+			&i.DeletedAt,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const searchMessages = `-- name: SearchMessages :many
+SELECT id, conversation_id, sender_id, type, content, metadata, reply_to_id,
+       is_edited, edited_at, is_deleted, deleted_at, created_at
+FROM messages
+WHERE conversation_id = $1
+AND (is_deleted = FALSE OR is_deleted IS NULL)
+AND to_tsvector('french', COALESCE(content, '')) @@ plainto_tsquery('french', $2)
+ORDER BY created_at DESC
+LIMIT $3 OFFSET $4
+`
+
+type SearchMessagesParams struct {
+	ConversationID uuid.UUID `json:"conversation_id"`
+	PlaintoTsquery string    `json:"plainto_tsquery"`
+	Limit          int32     `json:"limit"`
+	Offset         int32     `json:"offset"`
+}
+
+func (q *Queries) SearchMessages(ctx context.Context, arg SearchMessagesParams) ([]Message, error) {
+	rows, err := q.db.QueryContext(ctx, searchMessages,
+		arg.ConversationID,
+		arg.PlaintoTsquery,
+		arg.Limit,
+		arg.Offset,
+	)
 	if err != nil {
 		return nil, err
 	}

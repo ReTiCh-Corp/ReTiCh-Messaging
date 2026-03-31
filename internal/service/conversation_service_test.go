@@ -130,6 +130,12 @@ func (m *mockStore) UpdateMessageContent(_ context.Context, _ db.UpdateMessageCo
 func (m *mockStore) SoftDeleteMessage(_ context.Context, _ uuid.UUID) (db.Message, error) {
 	return db.Message{}, nil
 }
+func (m *mockStore) SearchMessages(_ context.Context, _ db.SearchMessagesParams) ([]db.Message, error) {
+	return nil, nil
+}
+func (m *mockStore) CountSearchMessages(_ context.Context, _ db.CountSearchMessagesParams) (int64, error) {
+	return 0, nil
+}
 
 // Reaction queries (stub implementations to satisfy Querier interface)
 func (m *mockStore) AddReaction(_ context.Context, _ db.AddReactionParams) (db.MessageReaction, error) {
