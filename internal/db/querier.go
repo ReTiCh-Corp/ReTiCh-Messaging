@@ -19,6 +19,7 @@ type Querier interface {
 	CountConversationsByUser(ctx context.Context, userID uuid.UUID) (int64, error)
 	CountMessagesByConversation(ctx context.Context, conversationID uuid.UUID) (int64, error)
 	CountSearchConversationsByUser(ctx context.Context, arg CountSearchConversationsByUserParams) (int64, error)
+	CountSearchMessages(ctx context.Context, arg CountSearchMessagesParams) (int64, error)
 	CreateAttachment(ctx context.Context, arg CreateAttachmentParams) (Attachment, error)
 	CreateConversation(ctx context.Context, arg CreateConversationParams) (Conversation, error)
 	CreateMessage(ctx context.Context, arg CreateMessageParams) (Message, error)
@@ -42,6 +43,7 @@ type Querier interface {
 	RemoveParticipant(ctx context.Context, arg RemoveParticipantParams) error
 	RemoveReaction(ctx context.Context, arg RemoveReactionParams) error
 	SearchConversationsByUser(ctx context.Context, arg SearchConversationsByUserParams) ([]SearchConversationsByUserRow, error)
+	SearchMessages(ctx context.Context, arg SearchMessagesParams) ([]Message, error)
 	SoftDeleteMessage(ctx context.Context, id uuid.UUID) (Message, error)
 	UnarchiveConversation(ctx context.Context, id uuid.UUID) (Conversation, error)
 	UnpinMessage(ctx context.Context, arg UnpinMessageParams) error

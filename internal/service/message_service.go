@@ -66,10 +66,19 @@ type EventBroadcaster interface {
 
 // --- Interface ---
 
+type SearchMessagesInput struct {
+	ConversationID uuid.UUID
+	UserID         uuid.UUID
+	Query          string
+	Limit          int32
+	Offset         int32
+}
+
 type MessageService interface {
 	Create(ctx context.Context, input CreateMessageInput) (MessageResponse, error)
 	GetByID(ctx context.Context, messageID uuid.UUID, userID uuid.UUID) (MessageResponse, error)
 	ListByConversation(ctx context.Context, input ListMessagesInput) (ListMessagesResult, error)
+	Search(ctx context.Context, input SearchMessagesInput) (ListMessagesResult, error)
 	Update(ctx context.Context, input UpdateMessageInput) (MessageResponse, error)
 	Delete(ctx context.Context, messageID uuid.UUID, userID uuid.UUID) error
 }
@@ -216,6 +225,54 @@ func (s *messageService) ListByConversation(ctx context.Context, input ListMessa
 		Messages: results,
 		Total:    total,
 	}, nil
+}
+
+func (s *messageService) Search(ctx context.Context, input SearchMessagesInput) (ListMessagesResult, error) {
+	// Verify conversation exists
+	_, err := s.store.GetConversationByID(ctx, input.ConversationID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ListMessagesResult{}, ErrConversationNotFound
+		}
+		return ListMessagesResult{}, err
+	}
+
+	// Verify user is participant
+	_, err = s.store.GetParticipant(ctx, db.GetParticipantParams{
+		ConversationID: input.ConversationID,
+		UserID:         input.UserID,
+	})
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ListMessagesResult{}, ErrNotParticipant
+		}
+		return ListMessagesResult{}, err
+	}
+
+	messages, err := s.store.SearchMessages(ctx, db.SearchMessagesParams{
+		ConversationID: input.ConversationID,
+		PlaintoTsquery: input.Query,
+		Limit:          input.Limit,
+		Offset:         input.Offset,
+	})
+	if err != nil {
+		return ListMessagesResult{}, err
+	}
+
+	total, err := s.store.CountSearchMessages(ctx, db.CountSearchMessagesParams{
+		ConversationID: input.ConversationID,
+		PlaintoTsquery: input.Query,
+	})
+	if err != nil {
+		return ListMessagesResult{}, err
+	}
+
+	results := make([]MessageResponse, len(messages))
+	for i, m := range messages {
+		results[i] = toMessageResponse(m)
+	}
+
+	return ListMessagesResult{Messages: results, Total: total}, nil
 }
 
 func (s *messageService) Update(ctx context.Context, input UpdateMessageInput) (MessageResponse, error) {

@@ -21,6 +21,7 @@ func NewMessageHandler(svc service.MessageService) *MessageHandler {
 }
 
 func (h *MessageHandler) RegisterRoutes(r *mux.Router) {
+	r.HandleFunc("/conversations/{id}/messages/search", h.Search).Methods("GET")
 	r.HandleFunc("/conversations/{id}/messages", h.List).Methods("GET")
 	r.HandleFunc("/conversations/{id}/messages", h.Create).Methods("POST")
 	r.HandleFunc("/messages/{id}", h.GetByID).Methods("GET")
@@ -298,4 +299,61 @@ func (h *MessageHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *MessageHandler) Search(w http.ResponseWriter, r *http.Request) {
+	convID, err := uuid.Parse(mux.Vars(r)["id"])
+	if err != nil {
+		response.BadRequest(w, "Invalid conversation ID format, expected UUID")
+		return
+	}
+
+	userID, err := getUserID(r)
+	if err != nil {
+		response.BadRequest(w, "Missing or invalid X-User-ID header")
+		return
+	}
+
+	query := r.URL.Query().Get("q")
+	if query == "" {
+		response.ValidationError(w, map[string]string{"q": "search query is required"})
+		return
+	}
+	if len(query) > 200 {
+		response.ValidationError(w, map[string]string{"q": "search query must not exceed 200 characters"})
+		return
+	}
+
+	limit, offset, errs := parsePagination(r)
+	if len(errs) > 0 {
+		response.ValidationError(w, errs)
+		return
+	}
+
+	result, err := h.service.Search(r.Context(), service.SearchMessagesInput{
+		ConversationID: convID,
+		UserID:         userID,
+		Query:          query,
+		Limit:          limit,
+		Offset:         offset,
+	})
+	if err != nil {
+		if errors.Is(err, service.ErrConversationNotFound) {
+			response.NotFound(w, "Conversation")
+			return
+		}
+		if errors.Is(err, service.ErrNotParticipant) {
+			response.Forbidden(w, "You are not a participant of this conversation")
+			return
+		}
+		log.Printf("ERROR: search messages in conversation %s: %v", convID, err)
+		response.InternalError(w)
+		return
+	}
+
+	response.SuccessWithPagination(w, result.Messages, response.PaginationMeta{
+		Total:  result.Total,
+		Limit:  limit,
+		Offset: offset,
+	})
 }
