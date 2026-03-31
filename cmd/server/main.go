@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 	"os"
@@ -11,6 +12,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/golang-migrate/migrate/v4"
+	"github.com/golang-migrate/migrate/v4/database/postgres"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/gorilla/mux"
 	_ "github.com/lib/pq"
 	"github.com/retich-corp/messaging/internal/client"
@@ -52,6 +56,26 @@ func main() {
 	}
 	log.Println("Connected to database")
 
+	// AUTO_MIGRATE=true : exécute les migrations au démarrage (dev uniquement).
+	if os.Getenv("AUTO_MIGRATE") == "true" {
+		migrationsPath := os.Getenv("MIGRATIONS_PATH")
+		if migrationsPath == "" {
+			migrationsPath = "file://migrations"
+		}
+		driver, err := postgres.WithInstance(conn, &postgres.Config{})
+		if err != nil {
+			log.Fatalf("Failed to create migration driver: %v", err)
+		}
+		m, err := migrate.NewWithDatabaseInstance(migrationsPath, "postgres", driver)
+		if err != nil {
+			log.Fatalf("Failed to initialize migrations: %v", err)
+		}
+		if err := m.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
+			log.Fatalf("Failed to run migrations: %v", err)
+		}
+		log.Println("Migrations applied successfully")
+	}
+
 	// Initialize user client for inter-service communication
 	var userClient *client.UserClient
 	if userServiceURL := os.Getenv("USER_SERVICE_URL"); userServiceURL != "" {
@@ -65,6 +89,8 @@ func main() {
 	store := db.NewSQLStore(conn)
 	conversationService := service.NewConversationService(store, userClient)
 	conversationHandler := handler.NewConversationHandler(conversationService)
+	messageService := service.NewMessageService(store)
+	messageHandler := handler.NewMessageHandler(messageService)
 
 	r := mux.NewRouter()
 	r.Use(func(next http.Handler) http.Handler {
@@ -77,6 +103,7 @@ func main() {
 	r.HandleFunc("/ready", readyHandler(conn)).Methods("GET")
 	r.HandleFunc("/test", healthHandler).Methods("GET")
 	conversationHandler.RegisterRoutes(r)
+	messageHandler.RegisterRoutes(r)
 
 	srv := &http.Server{
 		Addr:         ":" + port,

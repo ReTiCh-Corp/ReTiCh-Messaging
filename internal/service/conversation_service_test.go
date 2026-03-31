@@ -111,6 +111,26 @@ func (m *mockStore) CountActiveParticipants(_ context.Context, _ uuid.UUID) (int
 	return m.countPartResult, m.countPartErr
 }
 
+// Message queries (stub implementations to satisfy Querier interface)
+func (m *mockStore) CreateMessage(_ context.Context, _ db.CreateMessageParams) (db.Message, error) {
+	return db.Message{}, nil
+}
+func (m *mockStore) GetMessageByID(_ context.Context, _ uuid.UUID) (db.Message, error) {
+	return db.Message{}, nil
+}
+func (m *mockStore) ListMessagesByConversation(_ context.Context, _ db.ListMessagesByConversationParams) ([]db.Message, error) {
+	return nil, nil
+}
+func (m *mockStore) CountMessagesByConversation(_ context.Context, _ uuid.UUID) (int64, error) {
+	return 0, nil
+}
+func (m *mockStore) UpdateMessageContent(_ context.Context, _ db.UpdateMessageContentParams) (db.Message, error) {
+	return db.Message{}, nil
+}
+func (m *mockStore) SoftDeleteMessage(_ context.Context, _ uuid.UUID) (db.Message, error) {
+	return db.Message{}, nil
+}
+
 // =============================================================================
 // Mock UserValidator
 // =============================================================================
