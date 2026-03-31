@@ -59,6 +59,11 @@ type ListMessagesResult struct {
 	Total    int64
 }
 
+// EventBroadcaster publishes real-time events to connected clients.
+type EventBroadcaster interface {
+	BroadcastMessageEvent(eventType string, conversationID uuid.UUID, payload interface{})
+}
+
 // --- Interface ---
 
 type MessageService interface {
@@ -72,11 +77,12 @@ type MessageService interface {
 // --- Implementation ---
 
 type messageService struct {
-	store db.Store
+	store       db.Store
+	broadcaster EventBroadcaster
 }
 
-func NewMessageService(store db.Store) MessageService {
-	return &messageService{store: store}
+func NewMessageService(store db.Store, broadcaster EventBroadcaster) MessageService {
+	return &messageService{store: store, broadcaster: broadcaster}
 }
 
 func (s *messageService) Create(ctx context.Context, input CreateMessageInput) (MessageResponse, error) {
@@ -128,7 +134,13 @@ func (s *messageService) Create(ctx context.Context, input CreateMessageInput) (
 		return MessageResponse{}, err
 	}
 
-	return toMessageResponse(msg), nil
+	resp := toMessageResponse(msg)
+
+	if s.broadcaster != nil {
+		s.broadcaster.BroadcastMessageEvent("message.new", input.ConversationID, resp)
+	}
+
+	return resp, nil
 }
 
 func (s *messageService) GetByID(ctx context.Context, messageID uuid.UUID, userID uuid.UUID) (MessageResponse, error) {
@@ -236,7 +248,13 @@ func (s *messageService) Update(ctx context.Context, input UpdateMessageInput) (
 		return MessageResponse{}, err
 	}
 
-	return toMessageResponse(updated), nil
+	resp := toMessageResponse(updated)
+
+	if s.broadcaster != nil {
+		s.broadcaster.BroadcastMessageEvent("message.updated", updated.ConversationID, resp)
+	}
+
+	return resp, nil
 }
 
 func (s *messageService) Delete(ctx context.Context, messageID uuid.UUID, userID uuid.UUID) error {
@@ -274,7 +292,18 @@ func (s *messageService) Delete(ctx context.Context, messageID uuid.UUID, userID
 	}
 
 	_, err = s.store.SoftDeleteMessage(ctx, messageID)
-	return err
+	if err != nil {
+		return err
+	}
+
+	if s.broadcaster != nil {
+		s.broadcaster.BroadcastMessageEvent("message.deleted", msg.ConversationID, map[string]interface{}{
+			"id":              messageID,
+			"conversation_id": msg.ConversationID,
+		})
+	}
+
+	return nil
 }
 
 // --- Helpers ---
