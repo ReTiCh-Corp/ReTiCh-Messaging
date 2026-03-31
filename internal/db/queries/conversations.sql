@@ -9,7 +9,18 @@ FROM conversations
 WHERE id = $1;
 
 -- name: ListConversationsByUser :many
-SELECT c.id, c.type, c.name, c.description, c.avatar_url, c.creator_id, c.is_archived, c.last_message_at, c.created_at, c.updated_at
+SELECT c.id, c.type, c.name, c.description, c.avatar_url, c.creator_id, c.is_archived, c.last_message_at, c.created_at, c.updated_at,
+       COALESCE(
+         (SELECT COUNT(*) FROM messages m
+          WHERE m.conversation_id = c.id
+          AND (m.is_deleted = FALSE OR m.is_deleted IS NULL)
+          AND m.created_at > COALESCE(
+            (SELECT rr.last_read_at FROM read_receipts rr
+             WHERE rr.conversation_id = c.id AND rr.user_id = $1),
+            cp.joined_at
+          )
+         ), 0
+       )::bigint AS unread_count
 FROM conversations c
 INNER JOIN conversation_participants cp ON c.id = cp.conversation_id
 WHERE cp.user_id = $1 AND cp.left_at IS NULL
@@ -44,7 +55,18 @@ INNER JOIN conversation_participants cp ON c.id = cp.conversation_id
 WHERE cp.user_id = $1 AND cp.left_at IS NULL;
 
 -- name: SearchConversationsByUser :many
-SELECT c.id, c.type, c.name, c.description, c.avatar_url, c.creator_id, c.is_archived, c.last_message_at, c.created_at, c.updated_at
+SELECT c.id, c.type, c.name, c.description, c.avatar_url, c.creator_id, c.is_archived, c.last_message_at, c.created_at, c.updated_at,
+       COALESCE(
+         (SELECT COUNT(*) FROM messages m
+          WHERE m.conversation_id = c.id
+          AND (m.is_deleted = FALSE OR m.is_deleted IS NULL)
+          AND m.created_at > COALESCE(
+            (SELECT rr.last_read_at FROM read_receipts rr
+             WHERE rr.conversation_id = c.id AND rr.user_id = $1),
+            cp.joined_at
+          )
+         ), 0
+       )::bigint AS unread_count
 FROM conversations c
 INNER JOIN conversation_participants cp ON c.id = cp.conversation_id
 WHERE cp.user_id = $1 AND cp.left_at IS NULL

@@ -32,7 +32,7 @@ type Querier interface {
 	GetReadReceipt(ctx context.Context, arg GetReadReceiptParams) (ReadReceipt, error)
 	ListAttachmentsByConversation(ctx context.Context, arg ListAttachmentsByConversationParams) ([]Attachment, error)
 	ListAttachmentsByMessage(ctx context.Context, messageID uuid.UUID) ([]Attachment, error)
-	ListConversationsByUser(ctx context.Context, arg ListConversationsByUserParams) ([]Conversation, error)
+	ListConversationsByUser(ctx context.Context, arg ListConversationsByUserParams) ([]ListConversationsByUserRow, error)
 	ListMessagesByConversation(ctx context.Context, arg ListMessagesByConversationParams) ([]Message, error)
 	ListParticipants(ctx context.Context, conversationID uuid.UUID) ([]ConversationParticipant, error)
 	ListPinnedMessages(ctx context.Context, conversationID uuid.UUID) ([]PinnedMessage, error)
@@ -41,7 +41,7 @@ type Querier interface {
 	PinMessage(ctx context.Context, arg PinMessageParams) (PinnedMessage, error)
 	RemoveParticipant(ctx context.Context, arg RemoveParticipantParams) error
 	RemoveReaction(ctx context.Context, arg RemoveReactionParams) error
-	SearchConversationsByUser(ctx context.Context, arg SearchConversationsByUserParams) ([]Conversation, error)
+	SearchConversationsByUser(ctx context.Context, arg SearchConversationsByUserParams) ([]SearchConversationsByUserRow, error)
 	SoftDeleteMessage(ctx context.Context, id uuid.UUID) (Message, error)
 	UnarchiveConversation(ctx context.Context, id uuid.UUID) (Conversation, error)
 	UnpinMessage(ctx context.Context, arg UnpinMessageParams) error

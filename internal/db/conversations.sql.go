@@ -153,7 +153,18 @@ func (q *Queries) GetConversationByID(ctx context.Context, id uuid.UUID) (Conver
 }
 
 const listConversationsByUser = `-- name: ListConversationsByUser :many
-SELECT c.id, c.type, c.name, c.description, c.avatar_url, c.creator_id, c.is_archived, c.last_message_at, c.created_at, c.updated_at
+SELECT c.id, c.type, c.name, c.description, c.avatar_url, c.creator_id, c.is_archived, c.last_message_at, c.created_at, c.updated_at,
+       COALESCE(
+         (SELECT COUNT(*) FROM messages m
+          WHERE m.conversation_id = c.id
+          AND (m.is_deleted = FALSE OR m.is_deleted IS NULL)
+          AND m.created_at > COALESCE(
+            (SELECT rr.last_read_at FROM read_receipts rr
+             WHERE rr.conversation_id = c.id AND rr.user_id = $1),
+            cp.joined_at
+          )
+         ), 0
+       )::bigint AS unread_count
 FROM conversations c
 INNER JOIN conversation_participants cp ON c.id = cp.conversation_id
 WHERE cp.user_id = $1 AND cp.left_at IS NULL
@@ -167,15 +178,29 @@ type ListConversationsByUserParams struct {
 	Offset int32     `json:"offset"`
 }
 
-func (q *Queries) ListConversationsByUser(ctx context.Context, arg ListConversationsByUserParams) ([]Conversation, error) {
+type ListConversationsByUserRow struct {
+	ID            uuid.UUID        `json:"id"`
+	Type          ConversationType `json:"type"`
+	Name          sql.NullString   `json:"name"`
+	Description   sql.NullString   `json:"description"`
+	AvatarUrl     sql.NullString   `json:"avatar_url"`
+	CreatorID     uuid.NullUUID    `json:"creator_id"`
+	IsArchived    sql.NullBool     `json:"is_archived"`
+	LastMessageAt sql.NullTime     `json:"last_message_at"`
+	CreatedAt     sql.NullTime     `json:"created_at"`
+	UpdatedAt     sql.NullTime     `json:"updated_at"`
+	UnreadCount   int64            `json:"unread_count"`
+}
+
+func (q *Queries) ListConversationsByUser(ctx context.Context, arg ListConversationsByUserParams) ([]ListConversationsByUserRow, error) {
 	rows, err := q.db.QueryContext(ctx, listConversationsByUser, arg.UserID, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Conversation
+	var items []ListConversationsByUserRow
 	for rows.Next() {
-		var i Conversation
+		var i ListConversationsByUserRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.Type,
@@ -187,6 +212,7 @@ func (q *Queries) ListConversationsByUser(ctx context.Context, arg ListConversat
 			&i.LastMessageAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.UnreadCount,
 		); err != nil {
 			return nil, err
 		}
@@ -202,7 +228,18 @@ func (q *Queries) ListConversationsByUser(ctx context.Context, arg ListConversat
 }
 
 const searchConversationsByUser = `-- name: SearchConversationsByUser :many
-SELECT c.id, c.type, c.name, c.description, c.avatar_url, c.creator_id, c.is_archived, c.last_message_at, c.created_at, c.updated_at
+SELECT c.id, c.type, c.name, c.description, c.avatar_url, c.creator_id, c.is_archived, c.last_message_at, c.created_at, c.updated_at,
+       COALESCE(
+         (SELECT COUNT(*) FROM messages m
+          WHERE m.conversation_id = c.id
+          AND (m.is_deleted = FALSE OR m.is_deleted IS NULL)
+          AND m.created_at > COALESCE(
+            (SELECT rr.last_read_at FROM read_receipts rr
+             WHERE rr.conversation_id = c.id AND rr.user_id = $1),
+            cp.joined_at
+          )
+         ), 0
+       )::bigint AS unread_count
 FROM conversations c
 INNER JOIN conversation_participants cp ON c.id = cp.conversation_id
 WHERE cp.user_id = $1 AND cp.left_at IS NULL
@@ -229,7 +266,21 @@ type SearchConversationsByUserParams struct {
 	SearchTerm sql.NullString `json:"search_term"`
 }
 
-func (q *Queries) SearchConversationsByUser(ctx context.Context, arg SearchConversationsByUserParams) ([]Conversation, error) {
+type SearchConversationsByUserRow struct {
+	ID            uuid.UUID        `json:"id"`
+	Type          ConversationType `json:"type"`
+	Name          sql.NullString   `json:"name"`
+	Description   sql.NullString   `json:"description"`
+	AvatarUrl     sql.NullString   `json:"avatar_url"`
+	CreatorID     uuid.NullUUID    `json:"creator_id"`
+	IsArchived    sql.NullBool     `json:"is_archived"`
+	LastMessageAt sql.NullTime     `json:"last_message_at"`
+	CreatedAt     sql.NullTime     `json:"created_at"`
+	UpdatedAt     sql.NullTime     `json:"updated_at"`
+	UnreadCount   int64            `json:"unread_count"`
+}
+
+func (q *Queries) SearchConversationsByUser(ctx context.Context, arg SearchConversationsByUserParams) ([]SearchConversationsByUserRow, error) {
 	rows, err := q.db.QueryContext(ctx, searchConversationsByUser,
 		arg.UserID,
 		arg.Limit,
@@ -240,9 +291,9 @@ func (q *Queries) SearchConversationsByUser(ctx context.Context, arg SearchConve
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Conversation
+	var items []SearchConversationsByUserRow
 	for rows.Next() {
-		var i Conversation
+		var i SearchConversationsByUserRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.Type,
@@ -254,6 +305,7 @@ func (q *Queries) SearchConversationsByUser(ctx context.Context, arg SearchConve
 			&i.LastMessageAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.UnreadCount,
 		); err != nil {
 			return nil, err
 		}
