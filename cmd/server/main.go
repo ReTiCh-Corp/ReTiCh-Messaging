@@ -21,6 +21,7 @@ import (
 	db "github.com/retich-corp/messaging/internal/db"
 	"github.com/retich-corp/messaging/internal/handler"
 	"github.com/retich-corp/messaging/internal/service"
+	"github.com/retich-corp/messaging/internal/ws"
 )
 
 type HealthResponse struct {
@@ -85,12 +86,18 @@ func main() {
 		log.Println("USER_SERVICE_URL not set, user validation disabled")
 	}
 
+	// Initialize WebSocket hub
+	wsHub := ws.NewHub()
+	go wsHub.Run()
+
 	// Initialize layers
 	store := db.NewSQLStore(conn)
+	broadcaster := ws.NewHubBroadcaster(wsHub)
 	conversationService := service.NewConversationService(store, userClient)
 	conversationHandler := handler.NewConversationHandler(conversationService)
-	messageService := service.NewMessageService(store)
+	messageService := service.NewMessageService(store, broadcaster)
 	messageHandler := handler.NewMessageHandler(messageService)
+	wsHandler := ws.NewHandler(wsHub, store)
 
 	r := mux.NewRouter()
 	r.Use(func(next http.Handler) http.Handler {
@@ -102,6 +109,7 @@ func main() {
 	r.HandleFunc("/health", healthHandler).Methods("GET")
 	r.HandleFunc("/ready", readyHandler(conn)).Methods("GET")
 	r.HandleFunc("/test", healthHandler).Methods("GET")
+	r.HandleFunc("/ws", wsHandler.ServeWS)
 	conversationHandler.RegisterRoutes(r)
 	messageHandler.RegisterRoutes(r)
 

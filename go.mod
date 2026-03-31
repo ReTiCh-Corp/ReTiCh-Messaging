@@ -9,4 +9,7 @@ require (
 	github.com/sqlc-dev/pqtype v0.3.0
 )
 
-require github.com/golang-migrate/migrate/v4 v4.19.1 // indirect
+require (
+	github.com/golang-migrate/migrate/v4 v4.19.1 // indirect
+	github.com/gorilla/websocket v1.5.3 // indirect
+)
