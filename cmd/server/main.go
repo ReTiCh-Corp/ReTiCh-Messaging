@@ -97,6 +97,8 @@ func main() {
 	conversationHandler := handler.NewConversationHandler(conversationService)
 	messageService := service.NewMessageService(store, broadcaster)
 	messageHandler := handler.NewMessageHandler(messageService)
+	socialService := service.NewSocialService(store, broadcaster)
+	socialHandler := handler.NewSocialHandler(socialService)
 	wsHandler := ws.NewHandler(wsHub, store)
 
 	r := mux.NewRouter()
@@ -112,6 +114,7 @@ func main() {
 	r.HandleFunc("/ws", wsHandler.ServeWS)
 	conversationHandler.RegisterRoutes(r)
 	messageHandler.RegisterRoutes(r)
+	socialHandler.RegisterRoutes(r)
 
 	srv := &http.Server{
 		Addr:         ":" + port,

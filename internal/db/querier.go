@@ -12,6 +12,7 @@ import (
 
 type Querier interface {
 	AddParticipant(ctx context.Context, arg AddParticipantParams) (ConversationParticipant, error)
+	AddReaction(ctx context.Context, arg AddReactionParams) (MessageReaction, error)
 	ArchiveConversation(ctx context.Context, id uuid.UUID) (Conversation, error)
 	CountActiveParticipants(ctx context.Context, conversationID uuid.UUID) (int64, error)
 	CountConversationsByUser(ctx context.Context, userID uuid.UUID) (int64, error)
@@ -24,15 +25,24 @@ type Querier interface {
 	GetDirectConversationBetweenUsers(ctx context.Context, arg GetDirectConversationBetweenUsersParams) (Conversation, error)
 	GetMessageByID(ctx context.Context, id uuid.UUID) (Message, error)
 	GetParticipant(ctx context.Context, arg GetParticipantParams) (ConversationParticipant, error)
+	GetPinnedMessage(ctx context.Context, arg GetPinnedMessageParams) (PinnedMessage, error)
+	GetReadReceipt(ctx context.Context, arg GetReadReceiptParams) (ReadReceipt, error)
 	ListConversationsByUser(ctx context.Context, arg ListConversationsByUserParams) ([]Conversation, error)
 	ListMessagesByConversation(ctx context.Context, arg ListMessagesByConversationParams) ([]Message, error)
 	ListParticipants(ctx context.Context, conversationID uuid.UUID) ([]ConversationParticipant, error)
+	ListPinnedMessages(ctx context.Context, conversationID uuid.UUID) ([]PinnedMessage, error)
+	ListReactionsByMessage(ctx context.Context, messageID uuid.UUID) ([]MessageReaction, error)
+	ListReadReceipts(ctx context.Context, conversationID uuid.UUID) ([]ReadReceipt, error)
+	PinMessage(ctx context.Context, arg PinMessageParams) (PinnedMessage, error)
 	RemoveParticipant(ctx context.Context, arg RemoveParticipantParams) error
+	RemoveReaction(ctx context.Context, arg RemoveReactionParams) error
 	SearchConversationsByUser(ctx context.Context, arg SearchConversationsByUserParams) ([]Conversation, error)
 	SoftDeleteMessage(ctx context.Context, id uuid.UUID) (Message, error)
 	UnarchiveConversation(ctx context.Context, id uuid.UUID) (Conversation, error)
+	UnpinMessage(ctx context.Context, arg UnpinMessageParams) error
 	UpdateConversation(ctx context.Context, arg UpdateConversationParams) (Conversation, error)
 	UpdateMessageContent(ctx context.Context, arg UpdateMessageContentParams) (Message, error)
+	UpsertReadReceipt(ctx context.Context, arg UpsertReadReceiptParams) (ReadReceipt, error)
 }
 
 var _ Querier = (*Queries)(nil)
