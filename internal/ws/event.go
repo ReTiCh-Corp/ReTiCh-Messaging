@@ -14,6 +14,10 @@ const (
 	EventReadUpdated    = "read.updated"
 	EventMessagePinned  = "message.pinned"
 	EventMessageUnpinned = "message.unpinned"
+
+	EventPresenceOnline   = "presence.online"
+	EventPresenceOffline  = "presence.offline"
+	EventPresenceSnapshot = "presence.snapshot"
 )
 
 // Event is the envelope for all WebSocket messages.
