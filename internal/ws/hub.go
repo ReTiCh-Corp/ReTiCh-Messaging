@@ -59,20 +59,29 @@ func (h *Hub) Run() {
 				h.clients[client.userID] = make(map[*Client]bool)
 			}
 			h.clients[client.userID][client] = true
+			isFirstConnection := len(h.clients[client.userID]) == 1
 			h.mu.Unlock()
 			log.Printf("WS: user %s connected (%d connections)", client.userID, len(h.clients[client.userID]))
+			if isFirstConnection {
+				h.broadcastPresence(client.userID, EventPresenceOnline)
+			}
 
 		case client := <-h.unregister:
 			h.mu.Lock()
+			wasLastConnection := false
 			if conns, ok := h.clients[client.userID]; ok {
 				delete(conns, client)
 				close(client.send)
 				if len(conns) == 0 {
 					delete(h.clients, client.userID)
+					wasLastConnection = true
 				}
 			}
 			h.mu.Unlock()
 			log.Printf("WS: user %s disconnected", client.userID)
+			if wasLastConnection {
+				h.broadcastPresence(client.userID, EventPresenceOffline)
+			}
 
 		case sub := <-h.subscribe:
 			h.mu.Lock()
@@ -172,4 +181,92 @@ func (h *Hub) broadcastToRoom(conversationID, excludeUser uuid.UUID, data []byte
 // Register adds a client to the hub.
 func (h *Hub) Register(client *Client) {
 	h.register <- client
+}
+
+// broadcastPresence sends a presence event to all users sharing conversations with userID.
+func (h *Hub) broadcastPresence(userID uuid.UUID, eventType string) {
+	payload, _ := json.Marshal(map[string]string{"user_id": userID.String()})
+	evt := Event{
+		Type:    eventType,
+		Payload: payload,
+	}
+	data, err := json.Marshal(evt)
+	if err != nil {
+		log.Printf("WS: failed to marshal presence event: %v", err)
+		return
+	}
+
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	// Deduplicate recipients across multiple shared conversations
+	sent := make(map[uuid.UUID]bool)
+	for _, members := range h.rooms {
+		if !members[userID] {
+			continue
+		}
+		for memberID := range members {
+			if memberID == userID || sent[memberID] {
+				continue
+			}
+			sent[memberID] = true
+			if clients, ok := h.clients[memberID]; ok {
+				for client := range clients {
+					select {
+					case client.send <- data:
+					default:
+					}
+				}
+			}
+		}
+	}
+}
+
+// SendPresenceSnapshot sends the list of currently online users (that share conversations)
+// to the given client. Must be called after the client's rooms are subscribed.
+func (h *Hub) SendPresenceSnapshot(client *Client) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	// Collect all userIDs sharing conversations with this client
+	peers := make(map[uuid.UUID]bool)
+	for _, members := range h.rooms {
+		if !members[client.userID] {
+			continue
+		}
+		for memberID := range members {
+			if memberID != client.userID {
+				peers[memberID] = true
+			}
+		}
+	}
+
+	// Filter to online peers only
+	var onlineIDs []string
+	for peerID := range peers {
+		if _, ok := h.clients[peerID]; ok {
+			onlineIDs = append(onlineIDs, peerID.String())
+		}
+	}
+
+	if len(onlineIDs) == 0 {
+		onlineIDs = []string{}
+	}
+
+	payload, _ := json.Marshal(map[string][]string{"online_user_ids": onlineIDs})
+	evt := Event{
+		Type:    EventPresenceSnapshot,
+		Payload: payload,
+	}
+	data, err := json.Marshal(evt)
+	if err != nil {
+		log.Printf("WS: failed to marshal presence snapshot: %v", err)
+		return
+	}
+
+	select {
+	case client.send <- data:
+	default:
+		log.Printf("WS: dropping presence snapshot for user %s (buffer full)", client.userID)
+	}
 }

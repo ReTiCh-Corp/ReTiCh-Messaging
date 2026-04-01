@@ -56,6 +56,9 @@ func (h *Handler) ServeWS(w http.ResponseWriter, r *http.Request) {
 	// Subscribe user to all their conversations
 	h.subscribeToConversations(r.Context(), userID)
 
+	// Send presence snapshot after rooms are populated
+	h.hub.SendPresenceSnapshot(client)
+
 	go client.WritePump()
 	go client.ReadPump()
 }
