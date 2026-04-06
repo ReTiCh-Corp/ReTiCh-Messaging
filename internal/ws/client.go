@@ -11,7 +11,7 @@ import (
 const (
 	writeWait      = 10 * time.Second
 	pongWait       = 60 * time.Second
-	pingPeriod     = (pongWait * 9) / 10 // 54s
+	pingPeriod     = 20 * time.Second // keep-alive before proxy timeout (~38s)
 	maxMessageSize = 4096
 )
 
